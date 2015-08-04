@@ -6,3 +6,6 @@
 
 # Python egg metadata
 /*.egg-info
+
+# Build 
+/build
