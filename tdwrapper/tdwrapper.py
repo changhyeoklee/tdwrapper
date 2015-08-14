@@ -82,7 +82,7 @@ class tdwrapper(object):
                 column_info += [(line[0], 'cast({} as decimal(38, {}))'.format(line[0], max_frac_digits_for_float), 40)]
             elif line[1] == 'D':
                 column_info += [(line[0], line[0], len(line[2]) + 2)]
-            elif line[1] in ['CF', 'VF']:
+            elif line[1] in ['CF', 'CV']:
                 column_info += [(line[0], line[0], int(line[2][line[2].find('(') + 1:line[2].find(')')]))]
             elif line[1] == 'DA':
                 column_info += [(line[0], line[0], len(line[2]))]
