@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='tdwrapper',
-      version='0.0.1',
+      version='0.0.1-dev',
       description='Teradata utility wrapper for Python',
       url='https://github.com/changhyeoklee/tdwrapper',
       author='Changhyeok Lee',
