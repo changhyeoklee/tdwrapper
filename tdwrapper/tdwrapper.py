@@ -1,6 +1,11 @@
 import subprocess32 as subprocess
 import pandas as pd
 
+#TODO resturcture the code to re-use to_fexp_script()
+#TODO allow option to append header or not
+#TODO Chcek if sel * from with more spaces work
+#TODO Raise error when table does not exists in bteq process
+
 class tdwrapper(object):
 
     def __init__(self, logon_string_file, log_database, shell='/bin/bash'):
@@ -65,7 +70,9 @@ class tdwrapper(object):
 
         # Check if BTEQ run is successful
         if p.returncode is not 0:
-            raise Exception('fexp returns {}. See bteq_log attribute for details.'.format(p.returncode))
+            print self.bteq_log
+            print self.bteq_err
+            raise Exception('bteq returns {}.'.format(p.returncode))
 
         # Read BTEQ output file as list
 
@@ -133,7 +140,7 @@ class tdwrapper(object):
                 if column_name.lower() in column_info_dict:
                     column_info += [(column_name, ) + column_info_dict[column_name.lower()]]
                 else:
-                    raise Exception('Column {} does not exists in {}.'.format(column_name, table_name))
+                    raise Exception('Column {} does not exists in {}.'.format(column_name, table_name))     
 
         # Set FastExport output file name
         file_name_fexp = file_name + '.tmp'
@@ -175,13 +182,80 @@ class tdwrapper(object):
 
         # Check if FastExport run is successful
         if p.returncode is not 0:
-            raise Exception('fexp returns {}. See fexp_log attribute for details.'.format(p.returncode))
+            print self.fexp_log
+            print self.fexp_err
+            raise Exception('fexp returns {}.'.format(p.returncode))
 
         # Cut the first two bytes off
         subprocess.call('if [ -f {} ]; then cut -b 3- {} > {}; fi;'.format(file_name_fexp, file_name_fexp, file_name), shell=True, executable=self.shell)
 
         # Delete FastExport output file
         subprocess.call('if [ -f {} ]; then rm {}; fi;'.format(file_name_fexp, file_name_fexp), shell=True, executable=self.shell)
+
+    def to_fexp_script(self, sql, script_filename, data_filename, header_filename, delim='|', max_frac_digits_for_float=4):
+        
+        # Initialize bteq script and output
+        self.fexp_script = ''
+
+        # If delim = '\t', replace it with 'x\'09\''
+        if delim is '\t':
+            delim = 'x\'09\''
+
+        # Parse SQL statement
+        sql_split = sql.strip().split()
+
+        select_command = sql_split[0]
+        if select_command.lower() not in ['select', 'sel']:
+            raise Exception('No \'select\' command is found in sql query.')
+
+        try:
+            from_command_index = map(lambda token: token.lower(), sql_split).index('from')
+        except ValueError:
+            raise Exception('No \'from\' command is found in sql query.')
+
+        column_names = [column_name.strip() for column_name in ' '.join(sql_split[1:from_command_index]).split(',')]
+        table_name = sql_split[from_command_index + 1].strip()
+        sql_rest = ' '.join(sql_split[from_command_index:])
+
+        # Retreive column info
+        column_info = self.__get_column_info(table_name, max_frac_digits_for_float)
+
+        # If column names are specified by user, check against the column info
+        if len(column_names) != 1 or column_names[0].strip() != '*':
+            column_info_dict = dict([(item[0].lower(), item[1:])  for item in column_info])
+
+            column_info = []
+            for column_name in column_names:
+                if column_name.lower() in column_info_dict:
+                    column_info += [(column_name, ) + column_info_dict[column_name.lower()]]
+                else:
+                    raise Exception('Column {} does not exists in {}.'.format(column_name, table_name))
+
+        # Write FastExport script
+        column_header = ['\'{}\''.format(header_name.strip()) for header_name, column_name, column_size in column_info]
+        column_header = '||\'{}\'||'.format(delim).join(column_header)
+        
+        column_names_fexp = map(lambda (header_name, column_name, column_size): 'coalesce(cast({} as VARCHAR({})),\'?\')'.format(column_name.strip(), column_size), column_info)
+        column_names_fexp = '\n||\'{}\'||\n'.format(delim).join(column_names_fexp)
+
+        self.fexp_script = (
+            '.LOGTABLE ' + self.log_database + '.' + self.userid + '_fexp_log;\n'
+            '.RUN FILE ' + self.logon_string_file + ';\n'
+            '.BEGIN EXPORT;\n'
+            '.EXPORT MODE RECORD FORMAT TEXT OUTFILE ' + data_filename + ';\n'
+            '' + '\n'.join([select_command, column_names_fexp, sql_rest]) + ';\n'
+            '.END EXPORT;\n'
+            '.LOGOFF;\n'
+            )
+
+        # Write script to file
+        with open(script_filename, 'w') as f:
+            f.writelines(self.fexp_script)
+
+        # Write header to file
+        with open(header_filename, 'w') as f:
+            for col in column_info:
+                f.write(col[0] + '\n')
 
     def to_dataframe(self, sql, file_name=None, delim='|', max_frac_digits_for_float=4, print_stdout=False):
         
@@ -242,7 +316,9 @@ class tdwrapper(object):
 
         # Check if FastLoad run is successful
         if p.returncode is not 0:
-            raise Exception('fload returns {}. See fload_log attribute for details.'.format(p.returncode))
+            print self.fload_log
+            print self.fload_err
+            raise Exception('fload returns {}.'.format(p.returncode))
 
     def from_dataframe(self, df, table_name, file_name=None, print_stdout=False):
         
