@@ -5,6 +5,7 @@ import pandas as pd
 #TODO allow option to append header or not
 #TODO Chcek if sel * from with more spaces work
 #TODO Raise error when table does not exists in bteq process
+#TODO Make log table name to be variable to support multiple connection
 
 class tdwrapper(object):
 
@@ -239,7 +240,7 @@ class tdwrapper(object):
         column_names_fexp = '\n||\'{}\'||\n'.format(delim).join(column_names_fexp)
 
         self.fexp_script = (
-            '.LOGTABLE ' + self.log_database + '.' + self.userid + '_fexp_log;\n'
+            '.LOGTABLE ' + self.log_database + '.log_fexp_' + table_name.split('.')[1] + ';\n'
             '.RUN FILE ' + self.logon_string_file + ';\n'
             '.BEGIN EXPORT;\n'
             '.EXPORT MODE RECORD FORMAT TEXT OUTFILE ' + data_filename + ';\n'
